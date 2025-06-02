@@ -12,7 +12,12 @@ from pathlib import Path
 from ..models.document import DocumentProcessor
 from ..models.embeddings import EmbeddingManager
 from ..models.llm import LLMManager
-from .schemas import MessageRequest, MessageResponse
+from ..models.chat_history import ChatHistoryManager
+from .schemas import (
+    MessageRequest,
+    MessageResponse,
+    ChatHistoryResponse
+)
 
 # Load environment variables
 load_dotenv()
@@ -31,6 +36,7 @@ embedding_manager = EmbeddingManager(
     persist_directory=str(UPLOAD_DIR / "vector_store")
 )
 llm_manager = LLMManager(api_key)
+chat_history_manager = ChatHistoryManager()
 
 
 @router.post("/message-generator", response_model=MessageResponse)
@@ -53,6 +59,17 @@ async def generate_message(
         MessageResponse: Response chứa câu trả lời và context
     """
     try:
+        # Tạo session mới nếu chưa có
+        if not request.session_id:
+            request.session_id = chat_history_manager.create_session()
+
+        # Lưu câu hỏi vào chat history
+        chat_history_manager.add_message(
+            session_id=request.session_id,
+            role="user",
+            content=request.question
+        )
+
         # Load vector store từ ChromaDB
         if collection_name:
             embedding_manager.load_vector_store(
@@ -83,10 +100,82 @@ async def generate_message(
             **kwargs
         )
 
+        # Lưu câu trả lời vào chat history
+        chat_history_manager.add_message(
+            session_id=request.session_id,
+            role="assistant",
+            content=answer
+        )
+
         return MessageResponse(
             answer=answer,
-            context=context
+            context=context,
+            session_id=request.session_id
         )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/chat-history/{session_id}", response_model=ChatHistoryResponse)
+async def get_chat_history(
+    session_id: str,
+    limit: Optional[int] = None
+) -> Dict:
+    """
+    Lấy lịch sử chat của một session.
+
+    Args:
+        session_id: ID của session
+        limit: Số lượng tin nhắn tối đa
+
+    Returns:
+        ChatHistoryResponse: Lịch sử chat
+    """
+    try:
+        session = chat_history_manager.get_session(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found"
+            )
+
+        messages = chat_history_manager.get_chat_history(
+            session_id=session_id,
+            limit=limit
+        )
+
+        return ChatHistoryResponse(
+            session_id=session_id,
+            messages=messages,
+            created_at=session.created_at,
+            updated_at=session.updated_at
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/chat-history/{session_id}")
+async def delete_chat_history(session_id: str) -> Dict:
+    """
+    Xóa lịch sử chat của một session.
+
+    Args:
+        session_id: ID của session
+
+    Returns:
+        Dict: Thông báo kết quả
+    """
+    try:
+        success = chat_history_manager.delete_session(session_id)
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found"
+            )
+
+        return {"message": "Chat history deleted successfully"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
