@@ -48,6 +48,10 @@ class EmbeddingManager:
         Returns:
             VectorStore: Vector store đã được tạo
         """
+        # Kiểm tra documents có hợp lệ không
+        if not documents or all(doc.page_content.strip() == "" for doc in documents):
+            print(f"⚠️ Skipping create_vector_store for collection '{collection_name}' because documents are empty.")
+    
         self.vector_store = Chroma.from_documents(
             documents=documents,
             embedding=self.embeddings,

@@ -22,7 +22,7 @@ Dự án này triển khai một RAG (Retrieval-Augmented Generation) Pipeline s
 1. Clone repository:
 ```bash
 git clone <repository-url>
-cd rag-pipeline
+cd rag
 ```
 
 2. Tạo môi trường ảo:

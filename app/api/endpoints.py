@@ -4,7 +4,7 @@ API endpoints cho RAG Pipeline.
 
 import os
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from dotenv import load_dotenv
 import shutil
 from pathlib import Path
@@ -59,6 +59,7 @@ async def generate_message(
         MessageResponse: Response chứa câu trả lời và context
     """
     try:
+        print("Bắt đầu xử lý request:", request)
         # Tạo session mới nếu chưa có
         if not request.session_id:
             request.session_id = chat_history_manager.create_session()
@@ -70,13 +71,15 @@ async def generate_message(
             content=request.question
         )
 
+        print("Đã thêm message vào history")
         # Load vector store từ ChromaDB
         if collection_name:
             embedding_manager.load_vector_store(
                 collection_name=collection_name)
         else:
-            embedding_manager.load_vector_store()
+            embedding_manager.load_vector_store(collection_name="default_collection")
 
+        print("Đã load vector store")
         # Lấy retriever và thực hiện reranking
         base_retriever = embedding_manager.get_retriever(
             k=5,
